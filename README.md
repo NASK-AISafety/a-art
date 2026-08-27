@@ -69,7 +69,7 @@ The framework supports configurable ablation modes, multi-turn attacks with feed
 
 ```bash
 # Clone the repository
-git clone <this-repo-url>
+git clone https://github.com/NASK-AISafety/a-art
 cd a-art
 
 # Install with uv (recommended)
