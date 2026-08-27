@@ -1,0 +1,236 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "llm-red-team"
+version = "0.1.0"
+description = "A modular framework for LLM red-teaming and safety evaluation"
+readme = "README.md"
+requires-python = ">=3.9"
+keywords = ["llm", "red-teaming", "safety", "evaluation", "ai-safety", "s-art"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+dependencies = [
+    # Core ML dependencies
+    "torch>=2.4.0",
+    "transformers>=4.47.0",
+    "accelerate>=0.25.0",
+    "safetensors>=0.4.0",
+    # Data processing
+    "pandas>=2.0.0",
+    "numpy<2.0.0",
+    # Schema and validation
+    "pydantic>=2.5.0",
+    # Visualization (required by reporting/visualizer)
+    "matplotlib>=3.8.0",
+    "seaborn>=0.13.0",
+    # Configuration
+    "pyyaml>=6.0",
+    # Utilities
+    "uuid",
+    "tqdm>=4.66.0",
+    # Process-safe logging (HPC cluster support)
+    "filelock>=3.12.0",
+    # LLM abstraction layer (provider-agnostic inference)
+    "litellm>=1.0.0",
+    # Structured LLM outputs (Pydantic validation on generations)
+    "instructor>=1.0.0",
+    "torchvision>=0.19.0",
+    # Async file I/O for non-blocking JSONL logging
+    "aiofiles>=24.1.0",
+    "pyarrow>=21.0.0",
+    "parquet>=1.3.1",
+    "sentence-transformers>=5.1.2",
+    "hdbscan>=0.8.41",
+    "umap-learn>=0.5.11",
+    "plotly>=6.6.0",
+]
+
+[project.optional-dependencies]
+# Local development with GPU support
+local = [
+    # Pin torch; CUDA flavor is selected via the index URL
+    "torch>=2.4.0",
+    "transformers>=4.47.0",
+    "accelerate>=0.25.0",
+    "safetensors>=0.4.0",
+]
+
+# vLLM inference server — run in an ISOLATED environment to avoid torch conflicts.
+# The pipeline client (this project) only needs litellm, NOT the vllm package.
+# Install and start the server with:
+#   uvx vllm serve Qwen/Qwen3-VL-2B-Instruct --port 8000   (isolated env, no conflicts)
+# Or:  pip install vllm && vllm serve ...   in a separate venv
+
+# Cloud API support (for future LiteLLM integration)
+cloud = [
+    "litellm>=1.0.0",
+    "openai>=1.0.0",
+]
+
+# Development tools
+dev = [
+    "pytest>=7.3.0",
+    "pytest-cov>=4.1.0",
+    "pytest-asyncio>=0.23.0",
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.3.0",
+    "pre-commit>=3.5.0",
+]
+
+# Embedding & analysis (attack deduplication, clustering, pattern mining)
+analysis = [
+    "sentence-transformers>=3.0.0",
+    "scikit-learn>=1.4.0",
+    "umap-learn>=0.5.0",
+    "hdbscan>=0.8.0",
+    "plotly>=5.18.0",
+    "pyarrow>=14.0.0",
+]
+
+# Documentation
+docs = [
+    "mkdocs>=1.5.0",
+    "mkdocs-material>=9.4.0",
+    "mkdocstrings[python]>=0.24.0",
+]
+
+# All dependencies
+all = [
+    "llm-red-team[local,cloud,dev,docs,analysis]",
+]
+
+[project.scripts]
+llm-redteam = "llm_red_team.cli:main"
+llm-redteam-attack = "llm_red_team.pipelines.attack_pipeline:main"
+
+[tool.hatch.version]
+path = "src/llm_red_team/__init__.py"
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src",
+    "/scripts",
+    "/datasets",
+    "/docs",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/llm_red_team"]
+
+[tool.black]
+line-length = 100
+target-version = ['py39', 'py310', 'py311', 'py312']
+include = '\.pyi?$'
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+exclude = ["build", "_archive", "code_cleanup_finder.py", "results"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "B", "C90", "UP"]
+# E501: line too long (handled by formatter)
+# B008: function call in default argument (common pattern with Pydantic/FastAPI)
+# E722: bare except (occasionally needed in resilience paths)
+# B904: raise...from in except (not always appropriate)
+# B007: unused loop variable (false positives with _ pattern)
+ignore = ["E501", "B008", "E722", "B904", "B007"]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+# CLI entry point: main() complexity is inherent to argparse handling (pre-existing C901)
+"scripts/main.py" = ["C901"]
+"scripts/launch_vllm_multi.py" = ["C901"]
+# Pre-existing high-complexity functions: load_config_from_yaml (backward-compat YAML),
+# _build_components (component wiring), _clean_response (response parsing heuristics).
+# TODO: refactor into smaller helpers.
+"src/llm_red_team/pipelines/agentic_attack_pipeline.py" = ["C901"]
+"src/llm_red_team/agents/mutators/agentic_mutator.py" = ["C901"]
+# Pre-existing high-complexity _parse_response: many nullable field normalization branches.
+"src/llm_red_team/agents/planners/agentic_planner.py" = ["C901"]
+"src/llm_red_team/utils/json_parsing.py" = ["C901"]
+# Analysis script: compare_experiments, backtrace_duplicates, main() have inherent complexity
+# from multi-phase data processing pipelines. TODO: refactor into smaller helpers.
+"scripts/analyze_attacks.py" = ["C901"]
+# Imports inside try/except blocks are intentional — the script tests that each import works.
+"scripts/test_setup.py" = ["F401"]
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+strict_equality = true
+warn_redundant_casts = true
+
+# Suppress errors in legacy modules not yet migrated to strict typing.
+# Remove a module from this list incrementally as you add annotations.
+[[tool.mypy.overrides]]
+module = [
+    "llm_red_team.core.logger",
+    "llm_red_team.core.async_logger",
+    "llm_red_team.data.*",
+    "llm_red_team.guards.*",
+    "llm_red_team.agents.*",
+    "llm_red_team.utils.*",
+    "llm_red_team.schemas.*",
+]
+ignore_errors = true
+
+# Third-party stubs not installed in this environment — suppress import errors.
+[[tool.mypy.overrides]]
+module = ["yaml", "pandas", "torch", "transformers.*", "litellm", "instructor"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+asyncio_mode = "auto"
+addopts = "--cov=src/llm_red_team --cov-report=html --cov-report=term-missing"
+
+# UV Configuration for reproducible environments
+[dependency-groups]
+dev = [
+    "pytest>=7.3.0",
+    "pytest-cov>=4.1.0",
+    "pytest-asyncio>=0.23.0",
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.3.0",
+    "pre-commit>=3.5.0",
+    "jupyter>=1.0.0",
+    "ipykernel>=6.25.0",
+]
+
+[tool.uv.sources]
+torch = [
+    { index = "pytorch", marker = "sys_platform == 'linux'" },
+    { index = "pytorch-cpu", marker = "sys_platform != 'linux'" },
+]
+
+[[tool.uv.index]]
+name = "pytorch"
+url = "https://download.pytorch.org/whl/cu124"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cpu" 
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
